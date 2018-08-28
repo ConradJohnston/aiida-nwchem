@@ -10,6 +10,7 @@
     "entry_points": {
         "aiida.calculations": [
             "nwchem.basic = aiida_nwchem.calculations.basic:BasicCalculation",
+            "nwchem.standard = aiida_nwchem.calculations.standard:StandardCalculation",
             "nwchem.pymatgen = aiida_nwchem.calculations.nwcpymatgen:NwcpymatgenCalculation"
         ],
         "aiida.parsers": [
