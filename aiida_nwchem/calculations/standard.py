@@ -27,7 +27,7 @@ class StandardCalculation(JobCalculation):
         True by default.
     """
     def _init_internal_params(self):
-        super(BasicCalculation, self)._init_internal_params()
+        super(StandardCalculation, self)._init_internal_params()
 
         # Name of the default parser
         self._default_parser = 'nwchem.basic'
@@ -95,11 +95,17 @@ class StandardCalculation(JobCalculation):
             raise InputValidationError("parameters is not of type ParameterData")
         par = parameters.get_dict()
 
+       
+        # Capture the 'top-level directives'
         abbreviation = par.pop('abbreviation','aiida_calc')
         title = par.pop('title','AiiDA NWChem calculation')
+        memory = par.pop('memory', None)
+        echo = par.pop('echo', None)
+          
         basis = par.pop('basis',None)
         task = par.pop('task','scf')
         add_cell = par.pop('add_cell',True)
+        
 
         if basis is None:
             basis = dict()
@@ -108,10 +114,16 @@ class StandardCalculation(JobCalculation):
 
         input_filename = tempfolder.get_abs_path(self._DEFAULT_INPUT_FILE)
         with open(input_filename,'w') as f:
-            # Title
-            f.write('start {}\ntitle "{}"\n\n'.format(abbreviation,title))
+            # Start command and title
+            f.write('start {}\ntitle "{}"\n'.format(abbreviation,title))
+            # Echo input - generally not useful for AiiDA as the input is captured anyway
+            if echo:
+                f.write('echo\n')
+            # Custom memory specification
+            if memory:
+                f.write('memory {}\n'.format(memory))
             # Cell 
-            f.write('geometry units au\n')
+            f.write('geometry units angstroms\n')
             if add_cell:
                 f.write('  system crystal\n')
                 f.write('    lat_a {}\n    lat_b {}\n    lat_c {}\n'.format(*lat_lengths))
@@ -127,17 +139,29 @@ class StandardCalculation(JobCalculation):
             f.write('end\nbasis\n')
             for atom_type,b in basis.iteritems():
                 f.write('    {} {}\n'.format(atom_type,b))
-            # Additional free-form parameters
+            f.write('end\n')
+            # Additional free-form parameters as a dictionary of dictionaries.
+            # Stand alone keywords should be specified with an empty value string.
+            # Example excerpt from input dict: 
+            # 'dft': { 'xc' : 'b3lyp', 
+            #          'direct': ''
+            #        },
+            # Output: 
+            #  dft
+            #      xc b3lyp
+            #      direct
+            #  end
+            #
             for param, value in par.items():
                 if type(value) is dict:
                     f.write('{}\n'.format(param))
                     for subparam, subvalue in value.items():
-                        f.write('  {}    {}\n'.format(subparam, subvalue)) 
+                        f.write('    {} {}\n'.format(subparam, subvalue)) 
                     f.write('end\n')
                 else:
-                    f.write('{}    {}\n'.format(param, value)) 
+                    f.write('{} {}\n'.format(param, value)) 
             # Task (only one permitted - see full.py for complex calculations)
-            f.write('end\ntask {}\n'.format(task))
+            f.write('task {}\n'.format(task))
             f.flush()
 
         commandline_params = self._default_commandline_params
