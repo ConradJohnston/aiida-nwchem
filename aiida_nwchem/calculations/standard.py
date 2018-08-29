@@ -15,14 +15,17 @@ class StandardCalculation(JobCalculation):
     Stanard input plugin for NWChem. 
     This calculation differs from Basic in that it allows the 
     specification of additional parameters, giving access to 
-    additional NWChem functionality.
+    additional NWChem functionality, and the use of more than
+    one task directive. 
     More skill and care on the part of the user is required.
+    The geometry and cell can only be specified as part of the
+    first task. 
 
     Creates input from StructureData and
     parameters:
 
     * basis: dictionary of format ``{ 'atom species': 'basis set name' }``;
-    * task: NWChem task (*scf* by default);
+    * task_list: List of input dictionaries - one per task ;
     * add_cell: add *system crystal* block with lattice parameters,
         True by default.
     """
@@ -95,73 +98,99 @@ class StandardCalculation(JobCalculation):
             raise InputValidationError("parameters is not of type ParameterData")
         par = parameters.get_dict()
 
-       
         # Capture the 'top-level directives'
         abbreviation = par.pop('abbreviation','aiida_calc')
-        title = par.pop('title','AiiDA NWChem calculation')
-        memory = par.pop('memory', None)
         echo = par.pop('echo', None)
-          
-        basis = par.pop('basis',None)
-        task = par.pop('task','scf')
         add_cell = par.pop('add_cell',True)
         
-
-        if basis is None:
-            basis = dict()
-            for atom_type in set(atoms.get_chemical_symbols()):
-                basis[atom_type] = 'library 6-31g'
+        # Get the task list
+        task_list = par.pop('tasks', None)
+        if task_list is None: 
+            task_list = [{'task':'scf'}]
 
         input_filename = tempfolder.get_abs_path(self._DEFAULT_INPUT_FILE)
         with open(input_filename,'w') as f:
-            # Start command and title
-            f.write('start {}\ntitle "{}"\n'.format(abbreviation,title))
+             
+            # Start command 
+            f.write('start {}\n'.format(abbreviation))
             # Echo input - generally not useful for AiiDA as the input is captured anyway
             if echo:
                 f.write('echo\n')
-            # Custom memory specification
-            if memory:
-                f.write('memory {}\n'.format(memory))
-            # Cell 
-            f.write('geometry units angstroms\n')
-            if add_cell:
-                f.write('  system crystal\n')
-                f.write('    lat_a {}\n    lat_b {}\n    lat_c {}\n'.format(*lat_lengths))
-                f.write('    alpha {}\n    beta  {}\n    gamma {}\n'.format(*lat_angles))
-                f.write('  end\n')
-            # Coordinates
-            for i,atom_type in enumerate(atoms.get_chemical_symbols()):
-                f.write('    {} {} {} {}\n'.format(atom_type,
-                                               atoms.get_positions()[i][0],
-                                               atoms.get_positions()[i][1],
-                                               atoms.get_positions()[i][2]))
-            # Basis
-            f.write('end\nbasis\n')
-            for atom_type,b in basis.iteritems():
-                f.write('    {} {}\n'.format(atom_type,b))
-            f.write('end\n')
-            # Additional free-form parameters as a dictionary of dictionaries.
-            # Stand alone keywords should be specified with an empty value string.
-            # Example excerpt from input dict: 
-            # 'dft': { 'xc' : 'b3lyp', 
-            #          'direct': ''
-            #        },
-            # Output: 
-            #  dft
-            #      xc b3lyp
-            #      direct
-            #  end
-            #
-            for param, value in par.items():
-                if type(value) is dict:
-                    f.write('{}\n'.format(param))
-                    for subparam, subvalue in value.items():
-                        f.write('    {} {}\n'.format(subparam, subvalue)) 
+            # Keep track of whether this is the first task
+            first_task = True
+
+            for section in task_list:
+               
+                # Write the title for the task section
+                title = section.pop('title','AiiDA NWChem calculation')
+                f.write('title "{}"\n'.format(title))
+                
+                # Custom memory specification
+                memory = section.pop('memory', None)
+                if memory:
+                    f.write('memory {}\n'.format(memory))
+                
+                # Geometry section  
+                if first_task:
+                    f.write('geometry units angstroms\n')
+                    # Cell 
+                    if add_cell:
+                        f.write('    system crystal\n')
+                        f.write('        lat_a {}\n        lat_b {}\n        lat_c {}\n'.format(*lat_lengths))
+                        f.write('        alpha {}\n        beta  {}\n        gamma {}\n'.format(*lat_angles))
+                        f.write('    end\n')
+                    # Coordinates
+                    for i,atom_type in enumerate(atoms.get_chemical_symbols()):
+                        f.write('    {} {} {} {}\n'.format(atom_type,
+                                                       atoms.get_positions()[i][0],
+                                                       atoms.get_positions()[i][1],
+                                                       atoms.get_positions()[i][2]))
                     f.write('end\n')
-                else:
-                    f.write('{} {}\n'.format(param, value)) 
-            # Task (only one permitted - see freeform.py for complex calculations)
-            f.write('task {}\n'.format(task))
+                
+                # Basis
+                basis = section.pop('basis',None)
+                # Set a sefualt basis if required                
+                if basis is None:
+                    if first_task: 
+                        basis = dict()
+                        for atom_type in set(atoms.get_chemical_symbols()):
+                            basis[atom_type] = 'library 6-31g'
+                # Write the basis if there is one 
+                if basis is not None:
+                    f.write('basis\n')
+                    for atom_type,b in basis.iteritems():
+                        f.write('    {} {}\n'.format(atom_type,b))
+                    f.write('end\n')
+                
+                # Get the task for later (only one permitted per section)
+                task = section.pop('task','scf')
+                
+                # Additional free-form parameters as a dictionary of dictionaries.
+                # Stand alone keywords should be specified with an empty value string.
+                # Ex ample excerpt from input dict: 
+                # 'dft': { 'xc' : 'b3lyp', 
+                #          'direct': ''
+                #        },
+                # Output: 
+                #  dft
+                #      xc b3lyp
+                #      direct
+                #  end
+                #
+                for param, value in section.items():
+                    if type(value) is dict:
+                        f.write('{}\n'.format(param))
+                        for subparam, subvalue in value.items():
+                            f.write('    {} {}\n'.format(subparam, subvalue)) 
+                        f.write('end\n')
+                    else:
+                        f.write('{} {}\n'.format(param, value)) 
+
+                # Finish with the task statement
+                f.write('task {}\n\n'.format(task))
+
+                # We've definately seen the first task by now:
+                first_task = False
             f.flush()
 
         commandline_params = self._default_commandline_params
