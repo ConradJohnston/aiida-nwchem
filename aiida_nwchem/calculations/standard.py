@@ -160,7 +160,7 @@ class StandardCalculation(JobCalculation):
                     f.write('end\n')
                 else:
                     f.write('{} {}\n'.format(param, value)) 
-            # Task (only one permitted - see full.py for complex calculations)
+            # Task (only one permitted - see freeform.py for complex calculations)
             f.write('task {}\n'.format(task))
             f.flush()
 

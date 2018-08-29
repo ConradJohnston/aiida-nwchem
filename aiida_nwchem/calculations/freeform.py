@@ -10,9 +10,9 @@ from aiida.common.exceptions import InputValidationError
 from aiida.common.utils import classproperty
 
 
-class FullCalculation(JobCalculation):
+class FreeformCalculation(JobCalculation):
     """
-    Full input plugin for NWChem. 
+    Freeform input plugin for NWChem. 
     This calculation differs from Basic in that it allows the 
     specification of a free-from input file, giving access to 
     additional NWChem functionality in the same way as the 
@@ -21,8 +21,9 @@ class FullCalculation(JobCalculation):
     This calculation type, unlike standard allows for multiple 
     'task' directives to be specified. 
     
-    NWChem imputs allow for multiple tasks to be specified and the 
-    order of the 'task' directives in the input file is important. 
+    NWChem inputs allow for multiple tasks to be specified and the 
+    order of the 'task' directives (and the other sections) in the 
+    input file matters.
     This causes a problem for dictionaries which should have unique 
     keys. For this calculation class, the parameters are instead
     passed as a list of dictionaries, rather than a dictionary of 
@@ -105,12 +106,9 @@ class FullCalculation(JobCalculation):
             raise InputValidationError("parameters is not of type ParameterData")
         par = parameters.get_dict()
 
-        abbreviation = par.pop('abbreviation','aiida_calc')
-        title = par.pop('title','AiiDA NWChem calculation')
-        basis = par.pop('basis',None)
-        task = par.pop('task','scf')
-        add_cell = par.pop('add_cell',True)
-
+          
+        add_cell = par.pop('add_cell', False)
+        
         if basis is None:
             basis = dict()
             for atom_type in set(atoms.get_chemical_symbols()):
@@ -118,22 +116,55 @@ class FullCalculation(JobCalculation):
 
         input_filename = tempfolder.get_abs_path(self._DEFAULT_INPUT_FILE)
         with open(input_filename,'w') as f:
-            f.write('start {}\ntitle "{}"\n\n'.format(abbreviation,title))
-            f.write('geometry units au\n')
+            # Start command and title
+            f.write('start {}\ntitle "{}"\n'.format(abbreviation,title))
+            # Echo input - generally not useful for AiiDA as the input is captured anyway
+            if echo:
+                f.write('echo\n')
+            # Custom memory specification
+            if memory:
+                f.write('memory {}\n'.format(memory))
+            # Cell 
+            f.write('geometry units angstroms\n')
             if add_cell:
                 f.write('  system crystal\n')
                 f.write('    lat_a {}\n    lat_b {}\n    lat_c {}\n'.format(*lat_lengths))
                 f.write('    alpha {}\n    beta  {}\n    gamma {}\n'.format(*lat_angles))
                 f.write('  end\n')
+            # Coordinates
             for i,atom_type in enumerate(atoms.get_chemical_symbols()):
                 f.write('    {} {} {} {}\n'.format(atom_type,
                                                atoms.get_positions()[i][0],
                                                atoms.get_positions()[i][1],
                                                atoms.get_positions()[i][2]))
+            # Basis
             f.write('end\nbasis\n')
             for atom_type,b in basis.iteritems():
                 f.write('    {} {}\n'.format(atom_type,b))
-            f.write('end\ntask {}\n'.format(task))
+            f.write('end\n')
+            #
+            #
+            # Additional free-form parameters as a dictionary of dictionaries.
+            # Stand alone keywords should be specified with an empty value string.
+            # Example excerpt from input dict: 
+            # 'dft': { 'xc' : 'b3lyp', 
+            #          'direct': ''
+            #        },
+            # Output: 
+            #  dft
+            #      xc b3lyp
+            #      direct
+            #  end
+            #
+            for directive in par.directives:
+                for param, value in directive:
+                    if type(value) is dict:
+                        f.write('{}\n'.format(param))
+                        for subparam, subvalue in value.items():
+                            f.write('    {} {}\n'.format(subparam, subvalue)) 
+                        f.write('end\n')
+                    else:
+                        f.write('{} {}\n'.format(param, value)) 
             f.flush()
 
         commandline_params = self._default_commandline_params
