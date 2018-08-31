@@ -33,7 +33,7 @@ class StandardCalculation(JobCalculation):
         super(StandardCalculation, self)._init_internal_params()
 
         # Name of the default parser
-        self._default_parser = 'nwchem.basic'
+        self._default_parser = 'nwchem.standard'
 
         # Default input and output files
         self._DEFAULT_INPUT_FILE  = 'aiida.in'
@@ -163,7 +163,11 @@ class StandardCalculation(JobCalculation):
                     f.write('end\n')
                 
                 # Get the task for later (only one permitted per section)
-                task = section.pop('task','scf')
+                try:
+                    task = section.pop('task')
+                except KeyError as e:
+                    print("A task directive must be specified for each section")
+                    raise
                 
                 # Additional free-form parameters as a dictionary of dictionaries.
                 # Stand alone keywords should be specified with an empty value string.
@@ -191,6 +195,7 @@ class StandardCalculation(JobCalculation):
 
                 # We've definately seen the first task by now:
                 first_task = False
+
             f.flush()
 
         commandline_params = self._default_commandline_params
