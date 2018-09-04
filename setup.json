@@ -15,6 +15,7 @@
         ],
         "aiida.parsers": [
             "nwchem.basic = aiida_nwchem.parsers.basic:BasicParser",
+            "nwchem.standard = aiida_nwchem.parsers.standard:StandardParser",
             "nwchem.basenwc = aiida_nwchem.parsers.__init__:BasenwcParser",
             "nwchem.pymatgen = aiida_nwchem.parsers.nwcpymatgen:NwcpymatgenParser"
         ],
