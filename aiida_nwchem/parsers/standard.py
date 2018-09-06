@@ -180,11 +180,14 @@ class StandardParser(BasenwcParser):
         if positions:
             postions = np.array(positions, np.float64)
             if not cell:
-                atoms = ase.Atoms(symbols=symbols, positions=positions)
+                # If the cell is specified, ASE defaults to 0,0,0, which throws an AiiDA
+                # error for cell with volume of 0. Here we arbitrarily set the cell. 
+                # This isn't really satisfactory.
+                # TODO: Look into changing AiiDA test of cell volume.
+                cell = (1.,1.,1.)
             else:
                 cell = np.array(cell, np.float64)
-                atoms = ase.Atoms(symbols=symbols, positions=positions, cell=cell)
-        
+            atoms = ase.Atoms(symbols=symbols, positions=positions, cell=cell)
             output_nodes_list.append(('output_structure', StructureData(ase=atoms)))
     
         return output_nodes_list
