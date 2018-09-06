@@ -121,7 +121,6 @@ class StandardParser(BasenwcParser):
             # announce that the results are being printed. 
             if state == 'nwchem-dft-module' and re.match('^\s*Total DFT energy', line):
                 state = 'final-dft-results'
-                continue
             if state == 'final-dft-results':
                 result = re.match('^\s*([^=]+?)\s*=\s*([\-\d\.]+)$',line)
                 if result:
