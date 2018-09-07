@@ -100,8 +100,13 @@ class StandardParser(BasenwcParser):
                 state = 'nwchem-geoopt'
                 task_dict = {}
                 continue
-    
             
+            # Frequency
+            if state is None and re.match('^\s*NWChem Nuclear Hessian and Frequency Analysis\s*$',line):
+                state = 'nwchem-freq'
+                task_dict = {}
+                continue
+
             # 2. Get the data from each module
             # SCF (HF)
             if state == 'nwchem-scf-module' and re.match('^\s*Final [ROU]+HF\s*results\s*$',line):
@@ -163,6 +168,71 @@ class StandardParser(BasenwcParser):
                 else:
                     state = None
             
+            # Frequency Analysis
+            # (results)
+            if state == 'nwchem-freq' and re.match('^\s*Rotational Constants\s*$',line):
+                state = 'final-freq-results'
+                continue
+            # (results - dipole)
+            if state == 'nwchem-freq-results' and re.search('Projected Derivative Dipole',line):
+                state = 'final-freq-results-dipole'
+                dipole_list = []
+                frequencies = []
+                continue
+            # (results - ir)
+            if state == 'nwchem-freq-results' and re.search('Projected Infra Red',line):
+                state = 'final-freq-results-ir'
+                intensities = []
+                continue
+        
+            # Parse main results
+            if state == 'final-freq-results-entropy':
+                result = re.match('^\s*-\s([A-z\s\(\)]+)\s+=\s*([\d\.]+)',line)
+                if result:
+                    key = re.sub('[^a-zA-Z0-9]+', '_', result.group(1).lower())
+                    task_dict['entropy'][key] = result.group(2)
+            if state == 'final-freq-results-cv':
+                result = re.match('^\s*-\s([A-z\s\(\)]+)\s*=\s*([\d\.]+)',line)
+                if result:
+                    key = re.sub('[^a-zA-Z0-9]+', '_', result.group(1).lower())
+                    task_dict['heat_capactiy'][key] = result.group(2)
+            if state == 'final-freq-results':
+                result = re.match('^\s[A-z\s\(\)]+\s*=\s*([\d\.]+)',line)
+                if result:
+                    if result.group(1) == 'Total Entropy':
+                        state = 'final-freq-results-entropy'
+                        task_dict['entropy'] = {}
+                        key = re.sub('[^a-zA-Z0-9]+', '_', result.group(1).lower())
+                        task_dict['entropy'][key] = result.group(2)
+                        continue
+                    elif result.group(1) == 'Cv (constant volume heat capacity)':
+                        state = 'final-freq-results-cv'
+                        task_dict['head_capacity'] = {}
+                        task_dict['heat_capacity']['total_cv'] = result.group(2)
+                        continue
+                    else:
+                        key = re.sub('[^a-zA-Z0-9]+', '_', result.group(1).lower())
+                        task_dict[key] = result.group(2)
+                        continue
+            # Parse dipole data
+            if state == 'final-freq-results-dipole':
+                result = re.match('^\s*[\d]\s*([\-\d\.]+)\s*\|\|\s*([-\d.]+)\s*([-\d.]+)\s*([-\d.]+)$',line)
+                if result:
+                    # Get vibrational eigenvalues (cm^-1)
+                    frequencies.append(re.group(1))
+                    # Get dipole moments (cartesian, debye/angs)
+                    dipoles_list.append([re.group(2), re.group(3), re.group(4)])
+                    continue
+            # Parse IR data 
+            if state == 'final-freq-results-ir':
+                result = re.match('^\s*[\d]\s*[\-\d\.]+\s*\|\|\s*([-\d.]+)\s*([-\d.]+)\s*([-\d.]+)\s*([-\d.]+)$',line)
+                if result:
+                    # Get intensity (arbitraty units)
+                    intensities.append(re.group(4))
+                    continue
+           
+
+            # Always
             # If see timings, we are exiting the module  
             if re.match('^ Task  times  cpu:\s*([\d\.\d]+)s\s*wall:\s*([\d\.\d]+)s', line):
                 result = re.match('^ Task  times  cpu:\s*([\d\.\d]+)s\s*wall:\s*([\d\.\d]+)s', line)
