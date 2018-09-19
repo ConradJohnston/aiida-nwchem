@@ -18,8 +18,6 @@ class StandardCalculation(JobCalculation):
     additional NWChem functionality, and the use of more than
     one task directive. 
     More skill and care on the part of the user is required.
-    The geometry and cell can only be specified as part of the
-    first task. 
 
     Creates input from StructureData and
     parameters:
