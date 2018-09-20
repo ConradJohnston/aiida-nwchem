@@ -102,7 +102,7 @@ class StandardParser(BasenwcParser):
                     task_types.append('scf')
                 elif re.match('^\s*NWChem DFT Module\s*$',line):
                     in_task = True
-                    task_types.append('scf')
+                    task_types.append('dft')
                 elif re.match('^\s*NWChem Geometry Optimization\s*$',line):
                     in_task = True
                     task_types.append('geoopt')
