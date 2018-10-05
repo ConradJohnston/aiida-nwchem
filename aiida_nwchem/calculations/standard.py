@@ -146,18 +146,30 @@ class StandardCalculation(JobCalculation):
                     f.write('end\n')
                 
                 # Basis
+                # Specified as a dict with two keys 'options' and 'specs'
+                # - options - string with any basis set options to be applied
+                # - spec - a dictionary of element, basis pairs
+                #
+
                 basis = section.pop('basis',None)
-                # Set a sefualt basis if required                
+                # Set a defualt basis if required                
                 if basis is None:
                     if first_task: 
-                        basis = dict()
-                        for atom_type in set(atoms.get_chemical_symbols()):
-                            basis[atom_type] = 'library 6-31g'
+                        basis = {'specs':{'*': 'library 6-31g'}}
                 # Write the basis if there is one 
                 if basis is not None:
-                    f.write('basis\n')
-                    for atom_type,b in basis.iteritems():
-                        f.write('    {} {}\n'.format(atom_type,b))
+                    # Check for options eg. spherical/cartesian
+                    options = basis.pop('options',None)
+                    if options is None:
+                        f.write('basis\n')
+                    else:
+                        f.write('basis {}\n'.format(options))
+                    # Get the atom by atom basis sets
+                    specs = basis.pop('specs', None)
+                    if specs is None:
+                        specs = {'*': 'library 6-31g'}
+                    for atom_type,basis in specs.iteritems():
+                        f.write('    {} {}\n'.format(atom_type,basis))
                     f.write('end\n')
                 
                 # Get the task for later (only one permitted per section)
