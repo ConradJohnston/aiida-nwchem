@@ -26,6 +26,8 @@ class StandardCalculation(JobCalculation):
     * task_list: List of input dictionaries - one per task ;
     * add_cell: add *system crystal* block with lattice parameters,
         True by default.
+
+    TODO: Refactor into functions
     """
     def _init_internal_params(self):
         super(StandardCalculation, self)._init_internal_params()
@@ -130,7 +132,11 @@ class StandardCalculation(JobCalculation):
                 
                 # Geometry section  
                 if first_task:
-                    f.write('geometry units angstroms\n')
+                    geo_opts = section.pop('geometry_options', None)
+                    if geo_opts:
+                        f.write('geometry units angstroms {}\n'.format(geo_opts))
+                    else:
+                        f.write('geometry units angstroms\n')
                     # Cell 
                     if add_cell:
                         f.write('    system crystal\n')
