@@ -11,6 +11,8 @@ from aiida_nwchem.parsers import BasenwcParser
 from aiida_nwchem.calculations.standard import StandardCalculation
 from aiida.orm.data.parameter import ParameterData
 from aiida.orm.data.structure import StructureData
+from aiida.parsers.exceptions import OutputParsingError
+
 import numpy as np
 import ase 
 import re
@@ -42,9 +44,8 @@ class StandardParser(BasenwcParser):
         super(StandardParser, self).__init__(calc)
         
     def _check_calc_compatibility(self,calc):
-        from aiida.common.exceptions import ParsingError
         if not isinstance(calc,StandardCalculation):
-            raise ParsingError("Input calc must be a StandardCalculation")
+            raise OututParsingError("Input calc must be an NWChem StandardCalculation")
 
     def _get_output_nodes(self, output_path, error_path):
         """
@@ -59,8 +60,15 @@ class StandardParser(BasenwcParser):
         result_list = []
         # List to hold all output nodes 
         output_nodes_list = []
+        
+        # Check if NWChem finished:
+        if re.search('^\sTotal times  cpu:', all_lines[-1]):
+            job_successful = True
+        else: 
+            job_successful = False
 
-        # Cut the data in to lists
+        # In either case try to parse
+        # Cut the data into lists
         task_types, task_lines_list = self.separate_tasks(all_lines)
 
         # Loop over tasks, parsing each one
@@ -93,7 +101,13 @@ class StandardParser(BasenwcParser):
         # State to track if we're in a task or not
         in_task = False
         
-        for line in all_lines:
+        for index, line in enumerate(all_lines):
+
+            # Check for errors:
+            if re.search('For more information see the NWChem manual', line):
+                parse_errors(all_lines, index)
+                #raise OutputParsingError("NWChem did not finish properly. Reported error:\n"
+                #                         "{}".format(line))
 
             # Determine which NWChem module we are using
             if not in_task:
@@ -383,3 +397,67 @@ class StandardParser(BasenwcParser):
         'geoopt': parse_geoopt,
         'freq': parse_freq,
     }
+
+    def parse_errors(all_lines, err_index):
+        """
+        Parse the specific error messages
+
+        args: all_lines: list of lines from outfile, stripped of newline char 
+        returns: error_dict: dictionary describing the error encountered
+        """
+
+        # Limit the search to lines we've seen already
+        lines=all_lines[:err_index]
+
+        error_lines = []
+
+        state = None
+        info = ""
+
+        # Read the lines backwards from index looking for info between '-----'
+        for index in range(len(lines)-1, 0, -1):
+            line = lines[index]
+
+            if state == 'error_info':
+                if re.match('^\s------------------------------------------------------------------------$', line):
+                    error_lines.append(info)
+                    info = ""
+                    state = None
+                    continue
+                else:
+                    info = line + info # Order important because we looping backwards
+                    continue
+            else:
+                if re.match('^\s------------------------------------------------------------------------$', line):
+                    state = 'error_info'
+                    continue
+                #else:
+                #    break
+
+        # Organise and clean the data a bit
+        # Clean up to do
+        error_dict = {}
+        error_dict['error'] = error_lines[2]
+        error_dict['line'] = error_lines[1]
+        error_dict['explanation'] = error_lines[0]
+        
+        return error_dict
+
+
+
+
+
+         
+
+
+
+
+
+
+
+
+
+
+
+
+
