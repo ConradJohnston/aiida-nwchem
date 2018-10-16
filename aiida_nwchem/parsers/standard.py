@@ -79,7 +79,7 @@ class StandardParser(BasenwcParser):
         
         # Create ParameterData node
         output_nodes_list.append(('parameters', ParameterData(dict={'data':result_list})))
-        
+
         return output_nodes_list
  
 
